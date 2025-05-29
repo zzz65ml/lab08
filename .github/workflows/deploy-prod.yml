@@ -18,12 +18,15 @@ jobs:
           host: ${{ secrets.HOST }} # 确保与 scp-action 的 host 一致
           username: ${{ secrets.SSH_USER_NAME }}
           key: ${{ secrets.SSH_KEY }}
+          timeout: 120s # 增加超时时间到 120 秒
           script: |
-            # 确保目录存在，并设置所有者为 ubuntu (scp-action 将使用的用户)
+            echo "Starting to prepare directory permissions..."
             sudo mkdir -p /var/www/html
+            echo "Directory created or already exists."
             sudo chown -R ubuntu:ubuntu /var/www/html
-            # 可选：设置适当的权限，确保 ubuntu 用户可写
+            echo "Directory ownership set to ubuntu:ubuntu."
             sudo chmod -R 755 /var/www/html
+            echo "Directory permissions set to 755."
 
       # --- 关键步骤：复制文件 ---
       - name: copy file to server
@@ -36,6 +39,7 @@ jobs:
           source: "./html/*"
           target: "/var/www/html"
           strip_components: 1
+          timeout: 120s # 增加超时时间到 120 秒
           # 可选：添加 force: true 如果希望覆盖目标文件
 
       # --- 关键步骤：恢复目录权限（如果需要） ---
@@ -49,10 +53,13 @@ jobs:
           username: ${{ secrets.SSH_USER_NAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            echo "Starting to restore directory permissions..."
             # 恢复所有者为 root (如果需要)
             sudo chown -R root:root /var/www/html
+            echo "Directory ownership set to root:root."
             # 确保 root 也能读取和执行
             sudo chmod -R 755 /var/www/html
+            echo "Directory permissions set back to 755 for root."
             # 或者根据需要设置更精细的权限，例如：
             # sudo find /var/www/html -type d -exec chmod 755 {} \;
             # sudo find /var/www/html -type f -exec chmod 644 {} \;
