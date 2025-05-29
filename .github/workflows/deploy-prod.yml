@@ -11,14 +11,26 @@ jobs:
       - name: check out the code to build server
         uses: actions/checkout@v3
 
+      # --- 新增：网络连通性测试 ---
+      - name: Test network connectivity
+        run: |
+          echo "Testing connectivity to ${{ secrets.HOST }}:${{ secrets.SSH_PORT }}"
+          timeout 30 bash -c 'while ! echo > /dev/tcp/${{ secrets.HOST }}/${{ secrets.SSH_PORT }} 2>/dev/null; do sleep 1; done' || false
+          echo "Connection to ${{ secrets.HOST }}:${{ secrets.SSH_PORT }} established"
+
       # --- 关键步骤：设置目标目录权限 ---
       - name: Prepare directory permissions
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.HOST }} # 确保与 scp-action 的 host 一致
+          host: ${{ secrets.HOST }}
           username: ${{ secrets.SSH_USER_NAME }}
           key: ${{ secrets.SSH_KEY }}
-          timeout: 120s # 增加超时时间到 120 秒
+          timeout: 300s  # 延长超时时间
+          args: >-
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            -o ConnectTimeout=60
+            -o ConnectionAttempts=3
           script: |
             echo "Starting to prepare directory permissions..."
             sudo mkdir -p /var/www/html
@@ -32,26 +44,29 @@ jobs:
       - name: copy file to server
         uses: appleboy/scp-action@master
         with:
-          host: ${{secrets.HOST}} # 确保与 ssh-action 的 host 一致
-          username: ${{secrets.SSH_USER_NAME }} # 确保与 ssh-action 的 username 一致
-          port: ${{secrets.SSH_PORT }}
-          key: ${{secrets.SSH_KEY }} # 确保与 ssh-action 的 key 一致
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.SSH_USER_NAME }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
           source: "./html/*"
           target: "/var/www/html"
           strip_components: 1
-          timeout: 120s # 增加超时时间到 120 秒
+          timeout: 300s  # 延长超时时间
           # 可选：添加 force: true 如果希望覆盖目标文件
 
       # --- 关键步骤：恢复目录权限（如果需要） ---
-      # 注意：如果后续服务（如 Nginx）需要 root 权限读取，可能需要恢复
-      # 但通常设置 755 权限后，非 root 用户也可以读取和执行（目录）
-      # 如果文件需要被 root 拥有，则执行此步骤
       - name: Restore directory permissions if needed
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.SSH_USER_NAME }}
           key: ${{ secrets.SSH_KEY }}
+          timeout: 300s  # 延长超时时间
+          args: >-
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            -o ConnectTimeout=60
+            -o ConnectionAttempts=3
           script: |
             echo "Starting to restore directory permissions..."
             # 恢复所有者为 root (如果需要)
@@ -60,6 +75,3 @@ jobs:
             # 确保 root 也能读取和执行
             sudo chmod -R 755 /var/www/html
             echo "Directory permissions set back to 755 for root."
-            # 或者根据需要设置更精细的权限，例如：
-            # sudo find /var/www/html -type d -exec chmod 755 {} \;
-            # sudo find /var/www/html -type f -exec chmod 644 {} \;
